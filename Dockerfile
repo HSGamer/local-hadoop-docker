@@ -63,6 +63,9 @@ RUN wget https://dlcdn.apache.org/spark/spark-3.5.6/spark-3.5.6-bin-hadoop3.tgz 
     mv spark-3.5.6-bin-hadoop3 spark && \
     rm spark-3.5.6-bin-hadoop3.tgz
 
+# Fix SLF4J conflicts - Remove conflicting SLF4J binding from Hive
+RUN rm -f /home/hadoop/hive/lib/log4j-slf4j-impl-*.jar
+
 # Set environment variables
 ENV HADOOP_HOME=/home/hadoop/hadoop
 ENV HADOOP_INSTALL=$HADOOP_HOME
@@ -82,6 +85,9 @@ ENV HIVE_CONF_DIR=$HIVE_HOME/conf
 
 ENV SPARK_HOME=/home/hadoop/spark
 
+# Fix permissions for Spark example files
+RUN chmod -R 755 /home/hadoop/spark/examples
+
 ENV PATH=$PATH:$HADOOP_HOME/sbin:$HADOOP_HOME/bin
 ENV PATH=$PATH:$PIG_HOME/bin
 ENV PATH=$PATH:$HIVE_HOME/bin
@@ -96,7 +102,7 @@ RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa && \
 RUN echo "Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null" > ~/.ssh/config && \
     chmod 600 ~/.ssh/config
 
-# Configure Hadoop - core-site.xml
+# Configure Hadoop - core-site.xml with proxy user settings
 RUN echo '<?xml version="1.0" encoding="UTF-8"?>\n\
 <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>\n\
 <configuration>\n\
@@ -107,6 +113,15 @@ RUN echo '<?xml version="1.0" encoding="UTF-8"?>\n\
     <property>\n\
         <name>hadoop.tmp.dir</name>\n\
         <value>/home/hadoop/hadoop_tmp</value>\n\
+    </property>\n\
+    \n\
+    <property>\n\
+        <name>hadoop.proxyuser.hadoop.hosts</name>\n\
+        <value>*</value>\n\
+    </property>\n\
+    <property>\n\
+        <name>hadoop.proxyuser.hadoop.groups</name>\n\
+        <value>*</value>\n\
     </property>\n\
 </configuration>' > $HADOOP_CONF_DIR/core-site.xml
 
@@ -258,8 +273,121 @@ RUN echo '<?xml version="1.0"?>\n\
 # Set JAVA_HOME in hadoop-env.sh
 RUN echo "export JAVA_HOME=$JAVA_HOME" >> $HADOOP_CONF_DIR/hadoop-env.sh
 
-# Configure Hive
-RUN cp $HIVE_HOME/conf/hive-default.xml.template $HIVE_HOME/conf/hive-site.xml
+# Configure Hive with proper hive-site.xml (fix system property issues)
+RUN echo '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n\
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>\n\
+<configuration>\n\
+    <property>\n\
+        <name>javax.jdo.option.ConnectionURL</name>\n\
+        <value>jdbc:derby:;databaseName=/home/hadoop/hive_metastore_db;create=true</value>\n\
+        <description>JDBC connect string for a JDBC metastore</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>javax.jdo.option.ConnectionDriverName</name>\n\
+        <value>org.apache.derby.jdbc.EmbeddedDriver</value>\n\
+        <description>Driver class name for a JDBC metastore</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>javax.jdo.option.ConnectionUserName</name>\n\
+        <value>APP</value>\n\
+        <description>Username to use against metastore database</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>javax.jdo.option.ConnectionPassword</name>\n\
+        <value>mine</value>\n\
+        <description>password to use against metastore database</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.metastore.warehouse.dir</name>\n\
+        <value>/user/hive/warehouse</value>\n\
+        <description>location of default database for the warehouse</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.scratchdir</name>\n\
+        <value>/tmp/hive</value>\n\
+        <description>HDFS scratch directory for Hive jobs</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.local.scratchdir</name>\n\
+        <value>/tmp/hive</value>\n\
+        <description>Local scratch space for Hive jobs</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.downloaded.resources.dir</name>\n\
+        <value>/tmp/hive_resources</value>\n\
+        <description>Temporary local directory for added resources in the remote file system</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.server2.logging.operation.enabled</name>\n\
+        <value>false</value>\n\
+        <description>When true, HS2 will save operation logs and make them available for clients</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.server2.logging.operation.log.location</name>\n\
+        <value>/tmp/hive/operation_logs</value>\n\
+        <description>Top level directory where operation logs are stored if logging functionality is enabled</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.querylog.location</name>\n\
+        <value>/tmp/hive</value>\n\
+        <description>Location of Hive run time structured log file</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.dynamic.partition</name>\n\
+        <value>true</value>\n\
+        <description>Whether or not to allow dynamic partitions in DML/DDL</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.dynamic.partition.mode</name>\n\
+        <value>nonstrict</value>\n\
+        <description>In strict mode, the user must specify at least one static partition</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.mode.local.auto</name>\n\
+        <value>true</value>\n\
+        <description>Let Hive determine whether to run in local mode automatically</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.mode.local.auto.inputbytes.max</name>\n\
+        <value>134217728</value>\n\
+        <description>When hive.exec.mode.local.auto is true, input bytes should less than this for local mode</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.exec.mode.local.auto.input.files.max</name>\n\
+        <value>4</value>\n\
+        <description>When hive.exec.mode.local.auto is true, the number of tasks should less than this for local mode</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.mapred.mode</name>\n\
+        <value>nonstrict</value>\n\
+        <description>The mode in which the Hive operations are being performed</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.execution.engine</name>\n\
+        <value>mr</value>\n\
+        <description>Chooses execution engine. Options are: mr (Map-reduce), tez, spark</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.vectorized.execution.enabled</name>\n\
+        <value>false</value>\n\
+        <description>Enables vectorized query execution</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.support.concurrency</name>\n\
+        <value>false</value>\n\
+        <description>Enable Hive concurrency (requires ZooKeeper for DFS locks)</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.enforce.bucketing</name>\n\
+        <value>false</value>\n\
+        <description>Whether bucketing is enforced</description>\n\
+    </property>\n\
+    <property>\n\
+        <name>hive.enforce.sorting</name>\n\
+        <value>false</value>\n\
+        <description>Whether sorting is enforced</description>\n\
+    </property>\n\
+</configuration>' > $HIVE_CONF_DIR/hive-site.xml
 
 # Create necessary directories
 RUN mkdir -p ~/hadoop_tmp && \
@@ -279,7 +407,7 @@ RUN mkdir -p /tmp/spark-events && chmod 777 /tmp/spark-events
 # Switch back to root for final setup
 USER root
 
-# Create Hadoop initialization script
+# Create Hadoop initialization script with better Hive startup
 COPY <<EOF /home/hadoop/init-hadoop.sh
 #!/bin/bash
 # Source environment variables
@@ -299,6 +427,12 @@ export HIVE_HOME=/home/hadoop/hive
 export HIVE_CONF_DIR=\$HIVE_HOME/conf
 export SPARK_HOME=/home/hadoop/spark
 export PATH=\$PATH:\$HADOOP_HOME/sbin:\$HADOOP_HOME/bin:\$PIG_HOME/bin:\$HIVE_HOME/bin:\$SPARK_HOME/bin:\$SPARK_HOME/sbin
+
+# Create necessary local directories
+mkdir -p /tmp/hive
+mkdir -p /tmp/hive_resources
+mkdir -p /tmp/hive/operation_logs
+chmod -R 777 /tmp/hive*
 
 # Format namenode if not already formatted
 if [ ! -d "/home/hadoop/hadoop_data/namenode/current" ]; then
@@ -328,18 +462,27 @@ yarn node -list
 echo "Setting up HDFS directories..."
 hdfs dfs -mkdir -p /tmp
 hdfs dfs -mkdir -p /user/hive/warehouse
+hdfs dfs -mkdir -p /tmp/hive
 hdfs dfs -chmod g+w /tmp
 hdfs dfs -chmod g+w /user/hive/warehouse
+hdfs dfs -chmod g+w /tmp/hive
 
 # Initialize Hive schema if needed
 if [ ! -f "/home/hadoop/.hive_initialized" ]; then
     echo "Initializing Hive schema..."
+    cd /home/hadoop
     schematool -dbType derby -initSchema
     touch /home/hadoop/.hive_initialized
 fi
 
 # Start Spark history server
 start-history-server.sh
+
+# Start HiveServer2 with explicit configuration
+echo "Starting HiveServer2..."
+export HADOOP_CLIENT_OPTS="-Xmx512m"
+nohup hiveserver2 --hiveconf hive.server2.enable.doAs=false --hiveconf hive.security.authorization.enabled=false > /home/hadoop/hive_server.log 2>&1 &
+sleep 15 # Give HiveServer2 more time to fully start
 
 echo ""
 echo "All Hadoop services started successfully!"
@@ -367,16 +510,30 @@ echo ""
 echo "HDFS Usage:"
 hdfs dfs -df -h
 echo ""
+echo "HiveServer2 Status:"
+if pgrep -f "hiveserver2" > /dev/null; then
+    echo "HiveServer2 is running (PID: \$(pgrep -f hiveserver2))"
+else
+    echo "HiveServer2 is not running"
+fi
+echo ""
 echo "Recent Log Files:"
 echo "NameNode logs:"
 ls -la \$HADOOP_HOME/logs/*namenode* 2>/dev/null || echo "No namenode logs found"
 echo "ResourceManager logs:"
 ls -la \$HADOOP_HOME/logs/*resourcemanager* 2>/dev/null || echo "No resourcemanager logs found"
+echo "HiveServer2 logs:"
+if [ -f "/home/hadoop/hive_server.log" ]; then
+    echo "Last 10 lines of HiveServer2 log:"
+    tail -10 /home/hadoop/hive_server.log
+else
+    echo "No HiveServer2 log found"
+fi
 echo ""
 echo "=== End Status Report ==="
 EOF
 
-# Create test script
+# Create test script with better Hive connection handling
 COPY <<EOF /home/hadoop/test-hadoop.sh
 #!/bin/bash
 echo "Testing Hadoop with sample jobs..."
@@ -408,16 +565,168 @@ echo "WordCount results:"
 hdfs dfs -cat /user/hadoop/wordcount/output/part-*
 echo ""
 
+# Test 3: Hive Query
+echo "=== Test 3: Hive Query ==="
+echo "Checking if HiveServer2 is running..."
+if ! pgrep -f "hiveserver2" > /dev/null; then
+    echo "HiveServer2 not running, starting it..."
+    nohup hiveserver2 --hiveconf hive.server2.enable.doAs=false --hiveconf hive.security.authorization.enabled=false > /home/hadoop/hive_server.log 2>&1 &
+    echo "Waiting for HiveServer2 to start..."
+    sleep 20
+fi
+
+echo "Preparing data for Hive..."
+echo -e "1,apple\n2,banana\n3,orange" > /tmp/hive_data.txt
+hdfs dfs -rm -r /user/hadoop/hive_test_input 2>/dev/null || true
+hdfs dfs -mkdir -p /user/hadoop/hive_test_input
+hdfs dfs -put /tmp/hive_data.txt /user/hadoop/hive_test_input/
+
+echo "Testing Hive connection..."
+# Test connection first
+if beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SHOW DATABASES;" --silent=true > /dev/null 2>&1; then
+    echo "Hive connection successful, running queries..."
+
+    # Drop table if exists
+    echo "Dropping existing table..."
+    beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "DROP TABLE IF EXISTS test_table;"
+
+    # Create table
+    echo "Creating table..."
+    beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "CREATE EXTERNAL TABLE test_table (id INT, fruit STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LOCATION '/user/hadoop/hive_test_input/';"
+
+    # Simple SELECT
+    echo "Running SELECT * query..."
+    beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SELECT * FROM test_table;"
+
+    # Test COUNT with local mode fallback
+    echo "Running COUNT(*) query..."
+    echo "First trying with MapReduce..."
+    if ! beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SET hive.exec.mode.local.auto=false; SELECT COUNT(*) FROM test_table;" 2>/dev/null; then
+        echo "MapReduce failed, trying with local mode..."
+        beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SET hive.exec.mode.local.auto=true; SET hive.exec.mode.local.auto.inputbytes.max=134217728; SET hive.exec.mode.local.auto.input.files.max=4; SELECT COUNT(*) FROM test_table;"
+    fi
+
+    # Alternative: Simple aggregation without MapReduce
+    echo "Running simple aggregation query..."
+    beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SET hive.exec.mode.local.auto=true; SELECT fruit, COUNT(1) as cnt FROM test_table GROUP BY fruit;"
+
+else
+    echo "Could not connect to Hive. Please check HiveServer2 logs:"
+    tail -20 /home/hadoop/hive_server.log
+    echo ""
+    echo "Checking YARN status for MapReduce jobs..."
+    yarn application -list
+fi
+echo ""
+
+# Test 4: Spark Pi Example
+echo "=== Test 4: Spark Pi Example ==="
+echo "Running Spark Pi job on YARN..."
+spark-submit --class org.apache.spark.examples.SparkPi --master yarn --deploy-mode client --executor-memory 512m --num-executors 1 \$SPARK_HOME/examples/jars/spark-examples_*.jar 10
+echo ""
+
+# Cleanup
+echo "=== Cleaning up test data ==="
+hdfs dfs -rm -r /user/hadoop/test
+hdfs dfs -rm -r /user/hadoop/wordcount
+hdfs dfs -rm -r /user/hadoop/hive_test_input
+# Clean up Hive table if connection works
+if beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SHOW DATABASES;" --silent=true > /dev/null 2>&1; then
+    beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "DROP TABLE IF EXISTS test_table;"
+fi
+rm -f /tmp/test.txt
+rm -f /tmp/input*.txt
+rm -f /tmp/hive_data.txt
+echo "Cleanup complete."
+echo ""
+
 echo "All tests completed!"
+EOF
+
+# Create Hive troubleshooting script
+COPY <<EOF /home/hadoop/debug-hive.sh
+#!/bin/bash
+echo "=== Hive Debugging Information ==="
+echo ""
+
+echo "1. Checking Java processes:"
+jps | grep -E "(HiveServer2|RunJar)"
+echo ""
+
+echo "2. Checking HiveServer2 status:"
+if pgrep -f "hiveserver2" > /dev/null; then
+    echo "HiveServer2 is running (PID: \$(pgrep -f hiveserver2))"
+else
+    echo "HiveServer2 is NOT running"
+    echo "Starting HiveServer2..."
+    nohup hiveserver2 --hiveconf hive.server2.enable.doAs=false --hiveconf hive.security.authorization.enabled=false > /home/hadoop/hive_server.log 2>&1 &
+    sleep 15
+fi
+echo ""
+
+echo "3. Testing basic Hive connection:"
+if beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SHOW DATABASES;" --silent=true > /dev/null 2>&1; then
+    echo "✓ Hive connection successful"
+else
+    echo "✗ Hive connection failed"
+fi
+echo ""
+
+echo "4. Checking YARN ResourceManager:"
+if curl -s http://localhost:8088/ws/v1/cluster/info > /dev/null; then
+    echo "✓ YARN ResourceManager is accessible"
+    echo "YARN cluster info:"
+    curl -s http://localhost:8088/ws/v1/cluster/info | grep -o '"state":"[^"]*"'
+else
+    echo "✗ YARN ResourceManager not accessible"
+fi
+echo ""
+
+echo "5. Checking YARN nodes:"
+yarn node -list
+echo ""
+
+echo "6. Recent HiveServer2 logs (last 20 lines):"
+if [ -f "/home/hadoop/hive_server.log" ]; then
+    tail -20 /home/hadoop/hive_server.log
+else
+    echo "No HiveServer2 log file found"
+fi
+echo ""
+
+echo "7. Testing simple Hive query:"
+echo "Creating test data..."
+echo -e "test1\ntest2\ntest3" > /tmp/simple_test.txt
+hdfs dfs -rm -r /tmp/hive_simple_test 2>/dev/null || true
+hdfs dfs -mkdir -p /tmp/hive_simple_test
+hdfs dfs -put /tmp/simple_test.txt /tmp/hive_simple_test/
+
+echo "Running simple Hive queries..."
+beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "DROP TABLE IF EXISTS simple_test_table;"
+beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "CREATE EXTERNAL TABLE simple_test_table (data STRING) LOCATION '/tmp/hive_simple_test/';"
+beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SELECT * FROM simple_test_table;"
+
+echo "Testing COUNT with local mode:"
+beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "SET hive.exec.mode.local.auto=true; SELECT COUNT(*) FROM simple_test_table;"
+
+echo "Cleaning up test data..."
+beeline -u jdbc:hive2://localhost:10000/default -n hadoop -e "DROP TABLE IF EXISTS simple_test_table;"
+hdfs dfs -rm -r /tmp/hive_simple_test
+rm -f /tmp/simple_test.txt
+
+echo ""
+echo "=== End Hive Debug Information ==="
 EOF
 
 # Set permissions
 RUN chmod +x /home/hadoop/init-hadoop.sh && \
     chmod +x /home/hadoop/check-status.sh && \
     chmod +x /home/hadoop/test-hadoop.sh && \
+    chmod +x /home/hadoop/debug-hive.sh && \
     chown hadoop:hadoop /home/hadoop/init-hadoop.sh && \
     chown hadoop:hadoop /home/hadoop/check-status.sh && \
-    chown hadoop:hadoop /home/hadoop/test-hadoop.sh
+    chown hadoop:hadoop /home/hadoop/test-hadoop.sh && \
+    chown hadoop:hadoop /home/hadoop/debug-hive.sh
 
 # Add environment variables to hadoop user's .bashrc
 RUN echo '' >> /home/hadoop/.bashrc && \
@@ -475,6 +784,7 @@ echo ""
 echo "Diagnostic tools:"
 echo "  ./check-status.sh - Check cluster status"
 echo "  ./test-hadoop.sh - Run sample jobs"
+echo "  ./debug-hive.sh - Debug Hive issues"
 echo "===================================="
 
 # Keep container running
