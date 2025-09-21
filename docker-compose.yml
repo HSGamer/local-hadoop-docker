@@ -1,0 +1,186 @@
+version: "3.8"
+
+services:
+  hadoop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: hadoop-master
+    container_name: hadoop-local
+    restart: unless-stopped
+
+    # Port mappings - comprehensive coverage
+    ports:
+      # SSH
+      - "2222:22"
+
+      # HDFS ports
+      - "9000:9000" # HDFS NameNode IPC
+      - "9870:9870" # HDFS NameNode Web UI
+      - "9864:9864" # HDFS DataNode Web UI
+      - "9866:9866" # HDFS DataNode Data Transfer
+      - "9867:9867" # HDFS DataNode IPC
+
+      # YARN ports
+      - "8088:8088" # YARN ResourceManager Web UI
+      - "8042:8042" # YARN NodeManager Web UI
+      - "8030:8030" # YARN ResourceManager Scheduler
+      - "8031:8031" # YARN ResourceManager Tracker
+      - "8032:8032" # YARN ResourceManager Admin
+      - "8033:8033" # YARN ResourceManager Web Service
+
+      # MapReduce JobHistory Server
+      - "10020:10020" # MapReduce JobHistory Server IPC
+      - "19888:19888" # MapReduce JobHistory Server Web UI
+
+      # Spark ports
+      - "4040:4040" # Spark Application Web UI
+      - "4041:4041" # Additional Spark Application UIs
+      - "18080:18080" # Spark History Server
+      - "7077:7077" # Spark Master
+      - "8080:8081" # Spark Master Web UI (mapped to 8081 to avoid conflict)
+
+      # Hive ports
+      - "9083:9083" # Hive Metastore
+      - "10000:10000" # HiveServer2
+      - "10002:10002" # HiveServer2 Web UI
+
+      # Additional useful ports
+      - "50070:50070" # Legacy HDFS NameNode Web UI (for compatibility)
+
+    # Volumes for persistent data
+    volumes:
+      # HDFS data persistence
+      - hadoop_namenode:/home/hadoop/hadoop_data/namenode
+      - hadoop_datanode:/home/hadoop/hadoop_data/datanode
+      - hadoop_logs:/home/hadoop/hadoop/logs
+
+      # Application data
+      - hadoop_tmp:/home/hadoop/hadoop_tmp
+      - spark_logs:/home/hadoop/spark-logs
+      - spark_events:/tmp/spark-events
+
+      # Hive warehouse and metadata
+      - hive_warehouse:/user/hive/warehouse
+      - hive_metastore:/home/hadoop/hive/metastore_db
+
+      # User workspace for development
+      - hadoop_workspace:/home/hadoop/workspace
+
+      # SSH keys persistence (optional)
+      - hadoop_ssh:/home/hadoop/.ssh
+
+    # Environment variables for configuration
+    environment:
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - HADOOP_HOME=/home/hadoop/hadoop
+      - HADOOP_CONF_DIR=/home/hadoop/hadoop/etc/hadoop
+      - SPARK_HOME=/home/hadoop/spark
+      - HIVE_HOME=/home/hadoop/hive
+      - PIG_HOME=/home/hadoop/pig
+      - CLUSTER_NAME=hadoop-local-cluster
+
+      # Memory settings (adjust based on your host machine)
+      - YARN_HEAPSIZE=1024
+      - HADOOP_HEAPSIZE=1024
+
+      # Timezone
+      - TZ=UTC
+
+    # Resource limits (adjust based on your host machine)
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: "4"
+        reservations:
+          memory: 4G
+          cpus: "2"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870/", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+    # Network configuration
+    networks:
+      - hadoop-network
+
+# Named volumes for data persistence
+volumes:
+  hadoop_namenode:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/namenode
+
+  hadoop_datanode:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/datanode
+
+  hadoop_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/logs
+
+  hadoop_tmp:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/tmp
+
+  spark_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/spark-logs
+
+  spark_events:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/spark-events
+
+  hive_warehouse:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/hive/warehouse
+
+  hive_metastore:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/hive/metastore
+
+  hadoop_workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./workspace
+
+  hadoop_ssh:
+    driver: local
+
+# Custom network
+networks:
+  hadoop-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
