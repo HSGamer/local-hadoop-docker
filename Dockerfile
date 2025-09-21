@@ -45,11 +45,11 @@ RUN wget https://dlcdn.apache.org/hadoop/common/hadoop-3.4.2/hadoop-3.4.2-lean.t
     mv hadoop-3.4.2 hadoop && \
     rm hadoop-3.4.2-lean.tar.gz
 
-# Install Pig 0.18.0
-RUN wget https://dlcdn.apache.org/pig/pig-0.18.0/pig-0.18.0.tar.gz && \
-    tar -xzf pig-0.18.0.tar.gz && \
-    mv pig-0.18.0 pig && \
-    rm pig-0.18.0.tar.gz
+# Install Pig 0.17.0
+RUN wget https://dlcdn.apache.org/pig/pig-0.17.0/pig-0.17.0.tar.gz && \
+    tar -xzf pig-0.17.0.tar.gz && \
+    mv pig-0.17.0 pig && \
+    rm pig-0.17.0.tar.gz
 
 # Install Hive 4.1.0
 RUN wget https://dlcdn.apache.org/hive/hive-4.1.0/apache-hive-4.1.0-bin.tar.gz && \
