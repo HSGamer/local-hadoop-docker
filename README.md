@@ -2,6 +2,10 @@
 
 A complete Hadoop ecosystem running in Docker with persistent data storage.
 
+> [!NOTE]
+> Some parts of the project are AI-generated.
+> This is intended to be used for educational purposes only. Not for production.
+
 ## 🏗️ What's Included
 
 - **Hadoop 3.4.2** (HDFS + YARN + MapReduce)
@@ -12,6 +16,7 @@ A complete Hadoop ecosystem running in Docker with persistent data storage.
 
 ## 🚀 Quick Start
 
+### Linux/macOS
 1. **Clone and Setup**
    ```bash
    # Make the setup script executable
@@ -21,9 +26,16 @@ A complete Hadoop ecosystem running in Docker with persistent data storage.
    ./setup-hadoop.sh
    ```
 
+### Windows (PowerShell)
+1. **Clone and Setup**
+   ```powershell
+   # Run setup (creates directories and starts services)
+   .\setup-hadoop.ps1
+   ```
+
 2. **Wait for Initialization**
    - First startup takes 2-3 minutes
-   - Monitor progress: `docker-compose logs -f hadoop`
+   - Monitor progress: `docker-compose logs -f hadoop` (or `docker compose logs -f hadoop`)
 
 3. **Access the Cluster**
    ```bash
@@ -33,6 +45,7 @@ A complete Hadoop ecosystem running in Docker with persistent data storage.
 
    # Or use Docker exec
    docker-compose exec hadoop bash
+   # (or docker compose exec hadoop bash)
    ```
 
 ## 📊 Web UIs
@@ -51,18 +64,23 @@ A complete Hadoop ecosystem running in Docker with persistent data storage.
 ```bash
 # Start cluster
 docker-compose up -d
+# or: docker compose up -d
 
 # Stop cluster
 docker-compose down
+# or: docker compose down
 
 # View logs
 docker-compose logs -f hadoop
+# or: docker compose logs -f hadoop
 
 # Check cluster status
 docker-compose exec hadoop ./check-status.sh
+# or: docker compose exec hadoop ./check-status.sh
 
 # Run test jobs
 docker-compose exec hadoop ./test-hadoop.sh
+# or: docker compose exec hadoop ./test-hadoop.sh
 ```
 
 ### HDFS Operations
@@ -139,6 +157,7 @@ STORE counts INTO '/output';
 
 All data is stored in local directories and persists between container restarts:
 
+**Linux/macOS:**
 ```
 ./data/
 ├── namenode/          # HDFS NameNode metadata
@@ -152,6 +171,22 @@ All data is stored in local directories and persists between container restarts:
     └── metastore/     # Hive metadata database
 
 ./workspace/           # Your development files
+```
+
+**Windows:**
+```
+.\data\
+├── namenode\          # HDFS NameNode metadata
+├── datanode\          # HDFS DataNode blocks
+├── logs\              # Hadoop service logs
+├── tmp\               # Temporary files
+├── spark-logs\        # Spark application logs
+├── spark-events\      # Spark event logs for history server
+└── hive\
+    ├── warehouse\     # Hive data warehouse
+    └── metastore\     # Hive metadata database
+
+.\workspace\           # Your development files
 ```
 
 ## 🔧 Configuration
@@ -175,18 +210,21 @@ The cluster is configured with:
 | 10000 | HiveServer2 |
 | And more... |
 
-## 🐛 Troubleshooting
+## 🛠 Troubleshooting
 
 ### Services Not Starting
 ```bash
 # Check container logs
 docker-compose logs hadoop
+# or: docker compose logs hadoop
 
 # Check service status inside container
 docker-compose exec hadoop ./check-status.sh
+# or: docker compose exec hadoop ./check-status.sh
 
 # Restart services
 docker-compose restart hadoop
+# or: docker compose restart hadoop
 ```
 
 ### Out of Memory Issues
@@ -199,19 +237,31 @@ docker stats hadoop-local
 ```
 
 ### Permission Issues
+
+**Linux/macOS:**
 ```bash
 # Fix data directory permissions
 sudo chown -R $USER:$USER ./data ./workspace
 chmod -R 755 ./data ./workspace
 ```
 
+**Windows (PowerShell as Administrator):**
+```powershell
+# Fix data directory permissions
+icacls .\data /grant:r "$($env:USERNAME):(OI)(CI)F" /T
+icacls .\workspace /grant:r "$($env:USERNAME):(OI)(CI)F" /T
+```
+
 ### HDFS Safe Mode
 ```bash
 # If HDFS is in safe mode
 docker-compose exec hadoop hdfs dfsadmin -safemode leave
+# or: docker compose exec hadoop hdfs dfsadmin -safemode leave
 ```
 
 ### Reset Cluster
+
+**Linux/macOS:**
 ```bash
 # Stop and remove everything
 docker-compose down -v
@@ -221,6 +271,19 @@ sudo rm -rf ./data
 
 # Setup again
 ./setup-hadoop.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+# Stop and remove everything
+docker-compose down -v
+# or: docker compose down -v
+
+# Remove data (⚠️ This deletes all data!)
+Remove-Item -Path .\data -Recurse -Force
+
+# Setup again
+.\setup-hadoop.ps1
 ```
 
 ## 📈 Performance Tuning
@@ -242,10 +305,22 @@ For better performance on your specific hardware:
    - Increase Docker Desktop memory allocation
    - Adjust `deploy.resources` in docker-compose.yml
 
-## 🤝 Contributing
+## 🔍 Setup Script Features
 
-Feel free to submit issues and pull requests for improvements!
+Both setup scripts (`setup-hadoop.sh` for Linux/macOS and `setup-hadoop.ps1` for Windows) provide:
 
-## 📄 License
+- **Automatic directory creation** with proper permissions
+- **Docker Compose detection** (supports both legacy `docker-compose` and new `docker compose` commands)
+- **Service health checks** to verify cluster startup
+- **Colorized output** for better user experience
+- **Comprehensive status information** including all web UI links and useful commands
+- **Error handling** with informative messages
 
-This project is open source and available under the MIT License.
+The scripts will automatically:
+1. Create all necessary data directories
+2. Set appropriate permissions
+3. Detect and use the correct Docker Compose command
+4. Start the Hadoop cluster
+5. Wait for services to initialize
+6. Perform health checks on key services
+7. Display all relevant URLs and commands
